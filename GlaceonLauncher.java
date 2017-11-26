@@ -10,6 +10,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.net.InetAddress;
 import java.net.MalformedURLException;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.net.UnknownHostException;
@@ -39,8 +40,16 @@ public class GlaceonLauncher {
      * @param args the command line arguments
      */
     public static void main(String[] args) {
+        if (args.length > 0 && "--second-stage".equals(args[0])) {
+            secondstage(args);
+            System.exit(0);
+        }
+        if(args.length > 0 && "--server-jar".equals(args[0])) {
+            startjar(args);
+            System.exit(0);
+        }
         if (args.length != 0) {
-            spoofgame(args);
+            firststage(args);
             System.exit(0);
         }
         try {
@@ -72,61 +81,115 @@ public class GlaceonLauncher {
     }
     private static URLClassLoader gcl;
 
-    private static void spoofgame(String[] args) {
+    private static void firststage(String[] args) {
+        try {
+            String javapath = System.getProperty("java.home") + File.separator + "bin" + File.separator + ((System.getProperty("java.home").startsWith("Win"))?"java.exe":"java");
+            String ownjarpath = GlaceonLauncher.class.getProtectionDomain().getCodeSource().getLocation().toURI().getPath();
+            String mainclassname;
+            int i=0;
+            for (i = 0; i < args.length; i++) {
+                if (args[i].startsWith("-cp")) {
+                    i++;
+                    args[i] = ownjarpath + ":" + args[i];
+                    break;
+                }
+            }
+            for(i++;i<args.length; i++) {
+                if(!args[i].startsWith("-")) {
+                    mainclassname = args[i];
+                    break;
+                }
+            }
+            String[] secondcommand = new String[args.length+3];
+            System.arraycopy(args, 0, secondcommand, 1, i);
+            System.arraycopy(args, i, secondcommand, i+3, args.length-i);
+            secondcommand[0] = javapath;
+            secondcommand[i+1] = "glaceonlauncher.GlaceonLauncher";
+            secondcommand[i+2] = "--second-stage";
+            System.out.println("Will run:\n"+String.join("\n", secondcommand));
+            ProcessBuilder pb = new ProcessBuilder();
+            pb.command(secondcommand);
+            Process p = pb.start();
+            while(p.isAlive()) {
+                try {
+                    p.waitFor();
+                } catch (InterruptedException ex) {
+                }
+            }
+            System.exit(255);
+        } catch (SecurityException ex) {
+            Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (IllegalArgumentException ex) {
+            Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (URISyntaxException ex) {
+            Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (IOException ex) {
+            Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
+        }
+    }
+
+    private static void secondstage(String[] args) {
         try {
             Field f = InetAddress.class.getDeclaredField("nameServices");
             f.setAccessible(true);
             List<NameService> nsl = (List<NameService>) f.get(null);
             nsl.set(0, new GlaceonNS(nsl.get(0)));
-            boolean cpnext = false;
-            String mainclassname = "";
-            String[] gameargs = null;
-            for (int i = 0; i < args.length; i++) {
-                if (cpnext) {
-                    String[] gcp = args[i].split(":");
-                    URL[] gcu = new URL[gcp.length];
-                    for (int j = 0; j < gcp.length; j++) {
-                        gcu[j] = new URL("jar:file:" + gcp[j] + "!/");
-                    }
-                    JOptionPane.showMessageDialog(null, "classpath = \n" + String.join("\n", gcp));
-                    gcl = new URLClassLoader(gcu, Thread.currentThread().getContextClassLoader());
-                    cpnext = false;
-                    continue;
-                }
-                if (!args[i].startsWith("-")) {
-                    mainclassname = args[i];
-                    gameargs = new String[args.length - i - 1];
-                    System.arraycopy(args, i + 1, gameargs, 0, gameargs.length);
-                    break;
-                }
-                if ("-cp".equals(args[i])) {
-                    cpnext = true;
-                    continue;
-                }
-                if (args[i].startsWith("-D")) {
-                    String[] prop = args[i].substring(2).split("=");
-                    if("java.library.path".equals(prop[0])) {
-                        Field spf = ClassLoader.class.getDeclaredField("usr_paths");
-                        spf.setAccessible(true);
-                        final String[] paths = (String[]) spf.get(null);
-                        String[] newpaths = new String[paths.length];
-                        System.arraycopy(paths, 0, newpaths, 0, paths.length);
-                        newpaths[newpaths.length-1] = prop[1];
-                        spf.set(null, newpaths);
-                        JOptionPane.showMessageDialog(null, "added library path.");
-                    }
-                    System.setProperty(prop[0], prop[1]);
-                    continue;
-                }
-            }
-            JOptionPane.showMessageDialog(null, "mainclassname = " + mainclassname);
-            JOptionPane.showMessageDialog(null, "cmdlineargs = " + String.join(" # ", gameargs));
-            Thread.currentThread().setContextClassLoader(gcl);
-            Class mainclass = gcl.loadClass(mainclassname);
-            mainclass.getDeclaredMethod("main", new Class[]{String[].class}).invoke(null, (Object) gameargs);
-        } catch (NoSuchFieldException | SecurityException | IllegalArgumentException | IllegalAccessException | MalformedURLException | ClassNotFoundException | NoSuchMethodException | InvocationTargetException ex) {
+            Class mainclass = Class.forName(args[1]);
+            String[] gameargs = new String[args.length-2];
+            System.arraycopy(args, 2, gameargs, 0, args.length-2);
+            mainclass.getDeclaredMethod("main",  new Class[]{String[].class}).invoke(null, (Object)gameargs);
+        } catch (NoSuchFieldException ex) {
             Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
-            System.exit(255);
+        } catch (SecurityException ex) {
+            Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (IllegalArgumentException ex) {
+            Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (IllegalAccessException ex) {
+            Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (ClassNotFoundException ex) {
+            Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (NoSuchMethodException ex) {
+            Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (InvocationTargetException ex) {
+            Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
+        }
+    }
+
+    private static void startjar(String[] args) {
+        try {
+            launcher = new File(args[1]);
+            jf = new JarFile(launcher);
+            Field f = InetAddress.class.getDeclaredField("nameServices");
+            f.setAccessible(true);
+            List<NameService> nsl = (List<NameService>) f.get(null);
+            nsl.set(0, new GlaceonNS(nsl.get(0)));
+            Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.INFO, InetAddress.getByName("authserver.mojang.com").toString(), (Object)null);
+            String mainName = jf.getManifest().getMainAttributes().getValue("Main-Class");
+            System.out.println(mainName);
+            URL[] lu = new URL[]{new URL("jar:file:" + launcher.getAbsolutePath() + "!/")};
+            ucl = new URLClassLoader(lu, GlaceonLauncher.class.getClassLoader());
+            Class bootstrap = ucl.loadClass(mainName);
+            String[] serverargs = new String[args.length-2];
+            System.arraycopy(args, 2, serverargs, 0, args.length-2);
+            System.out.println(Integer.toString(serverargs.length) + " arguments passed: "+String.join("\n", serverargs));
+            System.out.println("Starting.");
+            bootstrap.getDeclaredMethod("main", new Class[]{String[].class}).invoke(null, (Object)new String[]{"-v"});
+        } catch (IOException ex) {
+            Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (NoSuchFieldException ex) {
+            Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (SecurityException ex) {
+            Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (IllegalArgumentException ex) {
+            Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (IllegalAccessException ex) {
+            Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (ClassNotFoundException ex) {
+            Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (NoSuchMethodException ex) {
+            Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (InvocationTargetException ex) {
+            Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
 }
