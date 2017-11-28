@@ -6,8 +6,10 @@ package glaceonlauncher;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.net.InetAddress;
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
@@ -35,6 +37,7 @@ public class GlaceonLauncher {
     static URLClassLoader ucl;
     final static String NETSOURCE = "http://s3.amazonaws.com/Minecraft.Download/launcher/Minecraft.jar";
     final static String LOCALURL = "./launcher.jar";
+    static Method mainmethod;
 
     /**
      * @param args the command line arguments
@@ -44,10 +47,15 @@ public class GlaceonLauncher {
             secondstage(args);
             System.exit(0);
         }
-        if(args.length > 0 && "--server-jar".equals(args[0])) {
+        /*if(args.length > 0 && "--server-jar".equals(args[0])) {
             startjar(args);
+            try {
+                mainmethod.invoke(null, (Object)new String[0]);
+            } catch (Exception ex) {
+                Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
+            }
             System.exit(0);
-        }
+        }*/
         if (args.length != 0) {
             firststage(args);
             System.exit(0);
@@ -79,13 +87,13 @@ public class GlaceonLauncher {
             Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
-    private static URLClassLoader gcl;
-
+    /**
+     * @param args the original command line arguments
+     */
     private static void firststage(String[] args) {
         try {
             String javapath = System.getProperty("java.home") + File.separator + "bin" + File.separator + ((System.getProperty("java.home").startsWith("Win"))?"java.exe":"java");
             String ownjarpath = GlaceonLauncher.class.getProtectionDomain().getCodeSource().getLocation().toURI().getPath();
-            String mainclassname;
             int i=0;
             for (i = 0; i < args.length; i++) {
                 if (args[i].startsWith("-cp")) {
@@ -96,7 +104,6 @@ public class GlaceonLauncher {
             }
             for(i++;i<args.length; i++) {
                 if(!args[i].startsWith("-")) {
-                    mainclassname = args[i];
                     break;
                 }
             }
@@ -116,7 +123,7 @@ public class GlaceonLauncher {
                 } catch (InterruptedException ex) {
                 }
             }
-            System.exit(255);
+            System.exit(0);
         } catch (SecurityException ex) {
             Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
         } catch (IllegalArgumentException ex) {
@@ -154,9 +161,14 @@ public class GlaceonLauncher {
             Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
-
-    private static void startjar(String[] args) {
+    
+    /*private static void startjar(String[] args) {
         try {
+            System.out.println(System.getProperty("java.home"));
+            PrintWriter pw = new PrintWriter("args.txt", "UTF-8");
+            pw.print(System.getProperty("java.home"));
+            pw.flush();
+            pw.close();
             launcher = new File(args[1]);
             jf = new JarFile(launcher);
             Field f = InetAddress.class.getDeclaredField("nameServices");
@@ -173,7 +185,7 @@ public class GlaceonLauncher {
             System.arraycopy(args, 2, serverargs, 0, args.length-2);
             System.out.println(Integer.toString(serverargs.length) + " arguments passed: "+String.join("\n", serverargs));
             System.out.println("Starting.");
-            bootstrap.getDeclaredMethod("main", new Class[]{String[].class}).invoke(null, (Object)new String[]{"-v"});
+            mainmethod = bootstrap.getDeclaredMethod("main", new Class[]{String[].class});
         } catch (IOException ex) {
             Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
         } catch (NoSuchFieldException ex) {
@@ -188,10 +200,8 @@ public class GlaceonLauncher {
             Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
         } catch (NoSuchMethodException ex) {
             Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
-        } catch (InvocationTargetException ex) {
-            Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
         }
-    }
+    } */
 }
 
 class GlaceonNS implements NameService {
