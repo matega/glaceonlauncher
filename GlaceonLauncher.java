@@ -4,8 +4,10 @@
 package glaceonlauncher;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.PrintWriter;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -17,7 +19,14 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.net.UnknownHostException;
 import java.nio.channels.Channels;
+import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateException;
+import java.security.cert.CertificateFactory;
 import java.util.Arrays;
 import java.util.List;
 import java.util.jar.JarFile;
@@ -38,13 +47,19 @@ public class GlaceonLauncher {
     final static String NETSOURCE = "http://s3.amazonaws.com/Minecraft.Download/launcher/Minecraft.jar";
     final static String LOCALURL = "./launcher.jar";
     static Method mainmethod;
-
+    static File cacerts;
+    
     /**
      * @param args the command line arguments
      */
     public static void main(String[] args) {
         if (args.length > 0 && "--second-stage".equals(args[0])) {
             secondstage(args);
+            System.exit(0);
+        }
+        cacerts = new File("./cacerts");
+        if(!cacerts.exists()) {
+            firstrun();
             System.exit(0);
         }
         /*if(args.length > 0 && "--server-jar".equals(args[0])) {
@@ -61,6 +76,7 @@ public class GlaceonLauncher {
             System.exit(0);
         }
         try {
+            System.setProperty("javax.net.ssl.trustStore", "./cacerts");
             launcher = new File(LOCALURL);
             if (!launcher.exists()) {
                 System.out.println(launcher.getCanonicalPath());
@@ -202,6 +218,33 @@ public class GlaceonLauncher {
             Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
         }
     } */
+
+    private static void firstrun() {
+        try {
+            String oldcacerts = System.getProperty("javax.net.ssl.trustStore");
+            if(oldcacerts == null) oldcacerts = System.getProperty("java.home")+File.separator+"lib"+File.separator+"security"+File.separator+"cacerts";
+            
+            InputStream newcertis = GlaceonLauncher.class.getResourceAsStream("cacert.pem");
+            KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
+            FileInputStream cacertsis = new FileInputStream(oldcacerts);
+            ks.load(cacertsis, null);
+            cacertsis.close();
+            CertificateFactory cf = CertificateFactory.getInstance("X.509");
+            Certificate newcacert = cf.generateCertificate(newcertis);
+            ks.setCertificateEntry("GlaceonCA", newcacert);
+            FileOutputStream out = new FileOutputStream(cacerts);
+            ks.store(out, "changeit".toCharArray());
+            out.close();
+        } catch (IOException ex) {
+            Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (KeyStoreException ex) {
+            Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (NoSuchAlgorithmException ex) {
+            Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (CertificateException ex) {
+            Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
+        }
+    }
 }
 
 class GlaceonNS implements NameService {
