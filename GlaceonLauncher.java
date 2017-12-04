@@ -57,11 +57,6 @@ public class GlaceonLauncher {
             secondstage(args);
             System.exit(0);
         }
-        cacerts = new File("./cacerts");
-        if(!cacerts.exists()) {
-            firstrun();
-            System.exit(0);
-        }
         /*if(args.length > 0 && "--server-jar".equals(args[0])) {
             startjar(args);
             try {
@@ -76,7 +71,7 @@ public class GlaceonLauncher {
             System.exit(0);
         }
         try {
-            System.setProperty("javax.net.ssl.trustStore", "./cacerts");
+            addcacert();
             launcher = new File(LOCALURL);
             if (!launcher.exists()) {
                 System.out.println(launcher.getCanonicalPath());
@@ -153,6 +148,7 @@ public class GlaceonLauncher {
 
     private static void secondstage(String[] args) {
         try {
+            addcacert();
             Field f = InetAddress.class.getDeclaredField("nameServices");
             f.setAccessible(true);
             List<NameService> nsl = (List<NameService>) f.get(null);
@@ -219,11 +215,12 @@ public class GlaceonLauncher {
         }
     } */
 
-    private static void firstrun() {
+    private static void addcacert() {
         try {
+            File cacerts = File.createTempFile("glaceonlauncher","cacerts");
+            cacerts.deleteOnExit();
             String oldcacerts = System.getProperty("javax.net.ssl.trustStore");
             if(oldcacerts == null) oldcacerts = System.getProperty("java.home")+File.separator+"lib"+File.separator+"security"+File.separator+"cacerts";
-            
             InputStream newcertis = GlaceonLauncher.class.getResourceAsStream("cacert.pem");
             KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
             FileInputStream cacertsis = new FileInputStream(oldcacerts);
@@ -235,6 +232,7 @@ public class GlaceonLauncher {
             FileOutputStream out = new FileOutputStream(cacerts);
             ks.store(out, "changeit".toCharArray());
             out.close();
+            System.setProperty("javax.net.ssl.trustStore", cacerts.getAbsolutePath());
         } catch (IOException ex) {
             Logger.getLogger(GlaceonLauncher.class.getName()).log(Level.SEVERE, null, ex);
         } catch (KeyStoreException ex) {
